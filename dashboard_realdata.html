@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Insole DFU Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .dark-mode {
+      background-color: #121212 !important;
+      color: #f0f0f0 !important;
+    }
+    .dark-mode .card {
+      background-color: #1e1e1e;
+      color: #fff;
+    }
+    .card {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .chart-container {
+      height: 300px;
+    }
+    .blinking {
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary px-3">
+  <a class="navbar-brand" href="#">DFU Insole Monitor</a>
+  <div class="d-flex ms-auto gap-2">
+    <input class="form-control" type="search" placeholder="Search Alerts" id="searchBar" style="max-width: 200px;">
+    <button class="btn btn-light" onclick="resetAlerts()">Reset Alerts</button>
+    <button class="btn btn-warning" onclick="downloadData()">Export Data</button>
+    <button class="btn btn-secondary" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+  </div>
+</nav>
+
+<div class="container my-4">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card text-white bg-info">
+        <div class="card-body">
+          <h5 class="card-title">Pressure</h5>
+          <p class="card-text display-6" id="pressure-value">0 kPa</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card text-white bg-info">
+        <div class="card-body">
+          <h5 class="card-title">Temperature</h5>
+          <p class="card-text display-6" id="temperature-value">0 °C</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">Real-Time Graphs</div>
+        <div class="card-body">
+          <div class="chart-container"><canvas id="pressureChart"></canvas></div>
+          <div class="chart-container mt-4"><canvas id="temperatureChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">Alert Log</div>
+        <div class="card-body">
+          <div id="alert-log" style="max-height: 200px; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const pressureChart = new Chart(document.getElementById("pressureChart"), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Pressure (kPa)',
+        borderColor: 'red',
+        data: [],
+        fill: false
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { min: 100, max: 300 } }
+    }
+  });
+
+  const temperatureChart = new Chart(document.getElementById("temperatureChart"), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Temperature (°C)',
+        borderColor: 'blue',
+        data: [],
+        fill: false
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { min: 34, max: 40 } }
+    }
+  });
+
+  let alertHistory = [];
+
+  function simulateData() {
+    const pressure = (160 + Math.random() * 110).toFixed(1); // 160–270
+    const temperature = (35.5 + Math.random() * 3).toFixed(1); // 35.5–38.5
+    const now = new Date().toLocaleTimeString();
+
+    document.getElementById("pressure-value").textContent = `${pressure} kPa`;
+    document.getElementById("temperature-value").textContent = `${temperature} °C`;
+
+    updateChart(pressureChart, pressure, now);
+    updateChart(temperatureChart, temperature, now);
+
+    if (pressure > 200 || temperature > 37) {
+      triggerAlert(pressure, temperature, now);
+    }
+  }
+
+  function updateChart(chart, value, label) {
+    chart.data.labels.push(label);
+    chart.data.datasets[0].data.push(value);
+    if (chart.data.labels.length > 20) {
+      chart.data.labels.shift();
+      chart.data.datasets[0].data.shift();
+    }
+    chart.update();
+  }
+
+  function triggerAlert(pressure, temperature, time) {
+    let msg = `⚠️ ALERT at ${time}:`;
+    if (pressure > 200) msg += ` High Pressure (${pressure} kPa)`;
+    if (temperature > 37) msg += ` High Temperature (${temperature} °C)`;
+
+    const p = document.createElement("p");
+    p.textContent = msg;
+    p.classList.add("text-danger", "fw-bold", "blinking");
+    document.getElementById("alert-log").prepend(p);
+
+    alertHistory.push({ time, pressure, temperature });
+  }
+
+  function resetAlerts() {
+    document.getElementById("alert-log").innerHTML = '';
+    alertHistory = [];
+  }
+
+  function downloadData() {
+    const blob = new Blob([JSON.stringify(alertHistory, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'dfu_alert_log.json';
+    link.click();
+  }
+
+  function toggleDarkMode() {
+    document.body.classList.toggle('dark-mode');
+  }
+
+  document.getElementById("searchBar").addEventListener("input", function () {
+    const query = this.value.toLowerCase();
+    const alerts = document.getElementById("alert-log").children;
+    for (let alert of alerts) {
+      alert.style.display = alert.textContent.toLowerCase().includes(query) ? 'block' : 'none';
+    }
+  });
+
+  setInterval(simulateData, 3000); // update every 3 seconds
+</script>
+
+</body>
+</html>
